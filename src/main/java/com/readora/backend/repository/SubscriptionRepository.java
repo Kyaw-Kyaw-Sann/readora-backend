@@ -28,31 +28,6 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
                 :plan IS NULL
                 OR s.plan = :plan
             )
-            AND (
-                :status IS NULL
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.expiresAt > :now
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                    AND (
-                        s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                        OR (
-                            s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                            AND s.expiresAt <= :now
-                        )
-                    )
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                )
-            )
             """, countQuery = """
             SELECT COUNT(s)
             FROM Subscription s
@@ -60,34 +35,8 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
                 :plan IS NULL
                 OR s.plan = :plan
             )
-            AND (
-                :status IS NULL
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.expiresAt > :now
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                    AND (
-                        s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                        OR (
-                            s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                            AND s.expiresAt <= :now
-                        )
-                    )
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                )
-            )
             """)
-    Page<Subscription> findAdminSubscriptions(@Param("status") SubscriptionStatus status,
-            @Param("plan") SubscriptionPlan plan, @Param("now") LocalDateTime now, Pageable pageable);
+    Page<Subscription> findAdminSubscriptions(@Param("plan") SubscriptionPlan plan, Pageable pageable);
 
     @Query(value = """
             SELECT s
@@ -100,31 +49,6 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
                 :plan IS NULL
                 OR s.plan = :plan
             )
-            AND (
-                :status IS NULL
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.expiresAt > :now
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                    AND (
-                        s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                        OR (
-                            s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                            AND s.expiresAt <= :now
-                        )
-                    )
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                )
-            )
             """, countQuery = """
             SELECT COUNT(s)
             FROM Subscription s
@@ -136,35 +60,144 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
                 :plan IS NULL
                 OR s.plan = :plan
             )
-            AND (
-                :status IS NULL
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                    AND s.expiresAt > :now
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                    AND (
-                        s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
-                        OR (
-                            s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
-                            AND s.expiresAt <= :now
-                        )
-                    )
-                )
-
-                OR (
-                    :status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                    AND s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
-                )
-            )
             """)
     Page<Subscription> findAdminSubscriptionsBySearch(@Param("searchPattern") String searchPattern,
-            @Param("status") SubscriptionStatus status, @Param("plan") SubscriptionPlan plan,
+            @Param("plan") SubscriptionPlan plan, Pageable pageable);
+
+    @Query(value = """
+            SELECT s
+            FROM Subscription s
+            WHERE s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+            AND s.expiresAt > :now
+            AND (:plan IS NULL OR s.plan = :plan)
+            """, countQuery = """
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+            AND s.expiresAt > :now
+            AND (:plan IS NULL OR s.plan = :plan)
+            """)
+    Page<Subscription> findAdminActiveSubscriptions(@Param("plan") SubscriptionPlan plan,
             @Param("now") LocalDateTime now, Pageable pageable);
+
+    @Query(value = """
+            SELECT s
+            FROM Subscription s
+            WHERE (
+                LOWER(s.user.name) LIKE :searchPattern
+                OR LOWER(s.user.email) LIKE :searchPattern
+            )
+            AND s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+            AND s.expiresAt > :now
+            AND (:plan IS NULL OR s.plan = :plan)
+            """, countQuery = """
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE (
+                LOWER(s.user.name) LIKE :searchPattern
+                OR LOWER(s.user.email) LIKE :searchPattern
+            )
+            AND s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+            AND s.expiresAt > :now
+            AND (:plan IS NULL OR s.plan = :plan)
+            """)
+    Page<Subscription> findAdminActiveSubscriptionsBySearch(@Param("searchPattern") String searchPattern,
+            @Param("plan") SubscriptionPlan plan, @Param("now") LocalDateTime now, Pageable pageable);
+
+    @Query(value = """
+            SELECT s
+            FROM Subscription s
+            WHERE (
+                s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
+                OR (
+                    s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+                    AND s.expiresAt <= :now
+                )
+            )
+            AND (:plan IS NULL OR s.plan = :plan)
+            """, countQuery = """
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE (
+                s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
+                OR (
+                    s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+                    AND s.expiresAt <= :now
+                )
+            )
+            AND (:plan IS NULL OR s.plan = :plan)
+            """)
+    Page<Subscription> findAdminExpiredSubscriptions(@Param("plan") SubscriptionPlan plan,
+            @Param("now") LocalDateTime now, Pageable pageable);
+
+    @Query(value = """
+            SELECT s
+            FROM Subscription s
+            WHERE (
+                LOWER(s.user.name) LIKE :searchPattern
+                OR LOWER(s.user.email) LIKE :searchPattern
+            )
+            AND (
+                s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
+                OR (
+                    s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+                    AND s.expiresAt <= :now
+                )
+            )
+            AND (:plan IS NULL OR s.plan = :plan)
+            """, countQuery = """
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE (
+                LOWER(s.user.name) LIKE :searchPattern
+                OR LOWER(s.user.email) LIKE :searchPattern
+            )
+            AND (
+                s.status = com.readora.backend.enums.SubscriptionStatus.EXPIRED
+                OR (
+                    s.status = com.readora.backend.enums.SubscriptionStatus.ACTIVE
+                    AND s.expiresAt <= :now
+                )
+            )
+            AND (:plan IS NULL OR s.plan = :plan)
+            """)
+    Page<Subscription> findAdminExpiredSubscriptionsBySearch(@Param("searchPattern") String searchPattern,
+            @Param("plan") SubscriptionPlan plan, @Param("now") LocalDateTime now, Pageable pageable);
+
+    @Query(value = """
+            SELECT s
+            FROM Subscription s
+            WHERE s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
+            AND (:plan IS NULL OR s.plan = :plan)
+            """, countQuery = """
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
+            AND (:plan IS NULL OR s.plan = :plan)
+            """)
+    Page<Subscription> findAdminCancelledSubscriptions(@Param("plan") SubscriptionPlan plan, Pageable pageable);
+
+    @Query(value = """
+            SELECT s
+            FROM Subscription s
+            WHERE (
+                LOWER(s.user.name) LIKE :searchPattern
+                OR LOWER(s.user.email) LIKE :searchPattern
+            )
+            AND s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
+            AND (:plan IS NULL OR s.plan = :plan)
+            """, countQuery = """
+            SELECT COUNT(s)
+            FROM Subscription s
+            WHERE (
+                LOWER(s.user.name) LIKE :searchPattern
+                OR LOWER(s.user.email) LIKE :searchPattern
+            )
+            AND s.status = com.readora.backend.enums.SubscriptionStatus.CANCELLED
+            AND (:plan IS NULL OR s.plan = :plan)
+            """)
+    Page<Subscription> findAdminCancelledSubscriptionsBySearch(@Param("searchPattern") String searchPattern,
+            @Param("plan") SubscriptionPlan plan, Pageable pageable);
 
     long countByPlan(SubscriptionPlan plan);
 
