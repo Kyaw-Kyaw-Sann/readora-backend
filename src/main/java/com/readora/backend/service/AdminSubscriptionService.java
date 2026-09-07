@@ -40,20 +40,50 @@ public class AdminSubscriptionService {
 
         if (normalizedSearch == null) {
 
-            subscriptionPage = subscriptionRepository.findAdminSubscriptions(status, plan, now, pageable);
+            subscriptionPage = findSubscriptionsWithoutSearch(status, plan, now, pageable);
 
         } else {
 
             String searchPattern = "%" + normalizedSearch + "%";
 
-            subscriptionPage = subscriptionRepository.findAdminSubscriptionsBySearch(searchPattern, status, plan, now,
-                    pageable);
+            subscriptionPage = findSubscriptionsBySearch(searchPattern, status, plan, now, pageable);
         }
 
         Page<AdminSubscriptionResponse> responsePage = subscriptionPage
                 .map(subscription -> AdminSubscriptionMapper.toResponse(subscription, now));
 
         return PageResponse.from(responsePage);
+    }
+
+    private Page<Subscription> findSubscriptionsWithoutSearch(SubscriptionStatus status, SubscriptionPlan plan,
+            LocalDateTime now, Pageable pageable) {
+
+        if (status == null) {
+            return subscriptionRepository.findAdminSubscriptions(plan, pageable);
+        }
+
+        return switch (status) {
+        case ACTIVE -> subscriptionRepository.findAdminActiveSubscriptions(plan, now, pageable);
+        case EXPIRED -> subscriptionRepository.findAdminExpiredSubscriptions(plan, now, pageable);
+        case CANCELLED -> subscriptionRepository.findAdminCancelledSubscriptions(plan, pageable);
+        };
+    }
+
+    private Page<Subscription> findSubscriptionsBySearch(String searchPattern, SubscriptionStatus status,
+            SubscriptionPlan plan, LocalDateTime now, Pageable pageable) {
+
+        if (status == null) {
+            return subscriptionRepository.findAdminSubscriptionsBySearch(searchPattern, plan, pageable);
+        }
+
+        return switch (status) {
+        case ACTIVE -> subscriptionRepository.findAdminActiveSubscriptionsBySearch(searchPattern, plan, now,
+                pageable);
+        case EXPIRED -> subscriptionRepository.findAdminExpiredSubscriptionsBySearch(searchPattern, plan, now,
+                pageable);
+        case CANCELLED -> subscriptionRepository.findAdminCancelledSubscriptionsBySearch(searchPattern, plan,
+                pageable);
+        };
     }
 
     private String normalizeSearch(String search) {
