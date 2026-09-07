@@ -16,12 +16,15 @@ import com.readora.backend.mapper.BookMapper;
 import com.readora.backend.repository.BookRepository;
 import com.readora.backend.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashSet;
@@ -30,6 +33,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BookService {
 
     private final BookRepository bookRepository;
@@ -54,6 +58,8 @@ public class BookService {
 
             MediaUploadResponse upload = cloudinaryService.uploadCover(cover);
 
+            deleteOnRollback(() -> cloudinaryService.deleteCover(upload.publicId()), "cover");
+
             book.setCoverUrl(upload.url());
 
             book.setCoverPublicId(upload.publicId());
@@ -63,6 +69,8 @@ public class BookService {
 
             MediaUploadResponse upload = cloudinaryService.uploadPdf(pdf);
 
+            deleteOnRollback(() -> cloudinaryService.deletePdf(upload.publicId()), "PDF");
+
             book.setPdfUrl(upload.url());
 
             book.setPdfPublicId(upload.publicId());
@@ -71,6 +79,8 @@ public class BookService {
         if (hasFile(audio)) {
 
             MediaUploadResponse upload = cloudinaryService.uploadAudio(audio);
+
+            deleteOnRollback(() -> cloudinaryService.deleteAudio(upload.publicId()), "audio");
 
             book.setAudioUrl(upload.url());
 
@@ -126,9 +136,15 @@ public class BookService {
 
         validateIsbnForUpdate(request.isbn(), id);
 
-        validateMediaActions(request, cover, pdf, audio);
+        boolean removeCover = Boolean.TRUE.equals(request.removeCover());
+        boolean removePdf = Boolean.TRUE.equals(request.removePdf());
+        boolean removeAudio = Boolean.TRUE.equals(request.removeAudio());
+
+        validateMediaActions(removeCover, removePdf, removeAudio, cover, pdf, audio);
 
         Set<Category> categories = getAndValidateCategories(request.categoryIds());
+
+        validatePublishedUpdate(book, categories, cover, pdf, audio, removeCover, removePdf, removeAudio);
 
         book.setTitle(request.title().trim());
 
@@ -150,11 +166,11 @@ public class BookService {
 
         book.setCategories(categories);
 
-        updateCover(book, cover, request.removeCover());
+        updateCover(book, cover, removeCover);
 
-        updatePdf(book, pdf, request.removePdf());
+        updatePdf(book, pdf, removePdf);
 
-        updateAudio(book, audio, request.removeAudio());
+        updateAudio(book, audio, removeAudio);
 
         Book updatedBook = bookRepository.save(book);
 
@@ -226,13 +242,44 @@ public class BookService {
         }
     }
 
+    private void validatePublishedUpdate(Book book, Set<Category> categories, MultipartFile cover,
+            MultipartFile pdf, MultipartFile audio, boolean removeCover, boolean removePdf, boolean removeAudio) {
+
+        if (book.getStatus() != BookStatus.PUBLISHED) {
+            return;
+        }
+
+        boolean hasActiveCategory = categories.stream().anyMatch(Category::isActive);
+
+        if (!hasActiveCategory) {
+            throw new BadRequestException("Published book must have at least one active category");
+        }
+
+        boolean willHaveCover = hasFile(cover)
+                || (!removeCover && book.getCoverUrl() != null && !book.getCoverUrl().isBlank());
+
+        if (!willHaveCover) {
+            throw new BadRequestException("Published book must have a cover");
+        }
+
+        boolean willHavePdf = hasFile(pdf)
+                || (!removePdf && book.getPdfUrl() != null && !book.getPdfUrl().isBlank());
+        boolean willHaveAudio = hasFile(audio)
+                || (!removeAudio && book.getAudioUrl() != null && !book.getAudioUrl().isBlank());
+
+        if (!willHavePdf && !willHaveAudio) {
+            throw new BadRequestException("Published book must have a PDF or audio");
+        }
+    }
+
     private void updateCover(Book book, MultipartFile cover, boolean removeCover) {
 
         if (removeCover) {
 
             if (book.getCoverPublicId() != null) {
 
-                cloudinaryService.deleteCover(book.getCoverPublicId());
+                String oldPublicId = book.getCoverPublicId();
+                deleteAfterCommit(() -> cloudinaryService.deleteCover(oldPublicId), "cover");
             }
 
             book.setCoverUrl(null);
@@ -243,7 +290,14 @@ public class BookService {
 
         if (hasFile(cover)) {
 
-            MediaUploadResponse upload = cloudinaryService.replaceCover(cover, book.getCoverPublicId());
+            String oldPublicId = book.getCoverPublicId();
+            MediaUploadResponse upload = cloudinaryService.uploadCover(cover);
+
+            deleteOnRollback(() -> cloudinaryService.deleteCover(upload.publicId()), "cover");
+
+            if (oldPublicId != null) {
+                deleteAfterCommit(() -> cloudinaryService.deleteCover(oldPublicId), "cover");
+            }
 
             book.setCoverUrl(upload.url());
 
@@ -257,7 +311,8 @@ public class BookService {
 
             if (book.getPdfPublicId() != null) {
 
-                cloudinaryService.deletePdf(book.getPdfPublicId());
+                String oldPublicId = book.getPdfPublicId();
+                deleteAfterCommit(() -> cloudinaryService.deletePdf(oldPublicId), "PDF");
             }
 
             book.setPdfUrl(null);
@@ -268,7 +323,14 @@ public class BookService {
 
         if (hasFile(pdf)) {
 
-            MediaUploadResponse upload = cloudinaryService.replacePdf(pdf, book.getPdfPublicId());
+            String oldPublicId = book.getPdfPublicId();
+            MediaUploadResponse upload = cloudinaryService.uploadPdf(pdf);
+
+            deleteOnRollback(() -> cloudinaryService.deletePdf(upload.publicId()), "PDF");
+
+            if (oldPublicId != null) {
+                deleteAfterCommit(() -> cloudinaryService.deletePdf(oldPublicId), "PDF");
+            }
 
             book.setPdfUrl(upload.url());
 
@@ -282,7 +344,8 @@ public class BookService {
 
             if (book.getAudioPublicId() != null) {
 
-                cloudinaryService.deleteAudio(book.getAudioPublicId());
+                String oldPublicId = book.getAudioPublicId();
+                deleteAfterCommit(() -> cloudinaryService.deleteAudio(oldPublicId), "audio");
             }
 
             book.setAudioUrl(null);
@@ -293,7 +356,14 @@ public class BookService {
 
         if (hasFile(audio)) {
 
-            MediaUploadResponse upload = cloudinaryService.replaceAudio(audio, book.getAudioPublicId());
+            String oldPublicId = book.getAudioPublicId();
+            MediaUploadResponse upload = cloudinaryService.uploadAudio(audio);
+
+            deleteOnRollback(() -> cloudinaryService.deleteAudio(upload.publicId()), "audio");
+
+            if (oldPublicId != null) {
+                deleteAfterCommit(() -> cloudinaryService.deleteAudio(oldPublicId), "audio");
+            }
 
             book.setAudioUrl(upload.url());
 
@@ -347,22 +417,59 @@ public class BookService {
         }
     }
 
-    private void validateMediaActions(UpdateBookRequest request, MultipartFile cover, MultipartFile pdf,
-            MultipartFile audio) {
+    private void validateMediaActions(boolean removeCover, boolean removePdf, boolean removeAudio,
+            MultipartFile cover, MultipartFile pdf, MultipartFile audio) {
 
-        if (request.removeCover() && hasFile(cover)) {
+        if (removeCover && hasFile(cover)) {
 
             throw new BadRequestException("Cannot upload and remove cover at the same time");
         }
 
-        if (request.removePdf() && hasFile(pdf)) {
+        if (removePdf && hasFile(pdf)) {
 
             throw new BadRequestException("Cannot upload and remove PDF at the same time");
         }
 
-        if (request.removeAudio() && hasFile(audio)) {
+        if (removeAudio && hasFile(audio)) {
 
             throw new BadRequestException("Cannot upload and remove audio at the same time");
+        }
+    }
+
+    private void deleteOnRollback(Runnable deleteAction, String mediaType) {
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+
+            @Override
+            public void afterCompletion(int status) {
+
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    runCleanup(deleteAction, mediaType, "rollback");
+                }
+            }
+        });
+    }
+
+    private void deleteAfterCommit(Runnable deleteAction, String mediaType) {
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+
+            @Override
+            public void afterCompletion(int status) {
+
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    runCleanup(deleteAction, mediaType, "commit");
+                }
+            }
+        });
+    }
+
+    private void runCleanup(Runnable deleteAction, String mediaType, String transactionOutcome) {
+
+        try {
+            deleteAction.run();
+        } catch (RuntimeException ex) {
+            log.error("Failed to clean up {} media after transaction {}", mediaType, transactionOutcome, ex);
         }
     }
 

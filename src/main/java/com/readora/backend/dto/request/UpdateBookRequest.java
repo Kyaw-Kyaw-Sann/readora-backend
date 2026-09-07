@@ -32,7 +32,7 @@ public record UpdateBookRequest(
 
         @NotEmpty(message = "At least one category is required") List<@NotNull(message = "Category ID cannot be null") Long> categoryIds,
 
-        boolean removeCover, boolean removePdf, boolean removeAudio
+        Boolean removeCover, Boolean removePdf, Boolean removeAudio
 
 ) {
 }
